@@ -1,0 +1,53 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Ambientes Virtuais
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Variáveis de ambiente locais
+.env
+.env.local
+
+# Conjuntos de dados pesados e imagens baixadas (não subir pro Git)
+data/garbage-classification-3/
+data/trashnet/
+data/raw/
+data/processed/
+datasets/
+
+# Pesos pesados do modelo e execuções de treinamento do YOLO
+models/weights/*.pt
+!models/weights/.gitkeep
+runs/
+*.pt
+*.onnx
+*.engine
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# IDEs e Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/

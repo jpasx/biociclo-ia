@@ -1,0 +1,23 @@
+# Dependências do Projeto BioCiclo IA
+# Compatível com Python 3.10+ / 3.11 / 3.12
+
+# Visão Computacional e Deep Learning
+ultralytics>=8.1.0
+opencv-python-headless>=4.9.0
+pillow>=10.2.0
+torchvision>=0.17.0
+
+# Interface Web Interativa (MVP)
+streamlit>=1.35.0
+
+# Manipulação de Dados e Visualização
+numpy>=1.26.0
+pandas>=2.2.0
+matplotlib>=3.8.0
+seaborn>=0.13.0
+plotly>=5.20.0
+
+# Download de Datasets e Utilitários
+roboflow>=1.1.0
+python-dotenv>=1.0.0
+pydantic>=2.0.0
