@@ -130,16 +130,34 @@ O projeto adota como base primária:
 - Contém **10.464 imagens anotadas** para detecção de objetos em formato YOLO com licença CC BY 4.0.
 - 7 classes: `BIODEGRADABLE`, `CARDBOARD`, `CLOTH`, `GLASS`, `METAL`, `PAPER`, `PLASTIC`.
 
-### Baixar o Dataset:
+### Como Obter o Dataset (Para a Equipe):
+
+O dataset de 10.464 imagens é pesado (~200 MB compactado) e está protegido no `.gitignore` para não sobrecarregar o repositório no GitHub. Cada membro da equipe pode obtê-lo escolhendo uma das opções abaixo:
+
+#### 🔹 Opção A: Download Direto pelo Navegador (Mais Rápido e Fácil)
+1. Acesse a página oficial: [GARBAGE CLASSIFICATION 3 (GC1) v2 no Roboflow](https://universe.roboflow.com/material-identification/garbage-classification-3/dataset/2).
+2. Clique no botão **"Download Dataset"** no topo da página.
+3. Selecione o formato **YOLOv8** e a opção **"download zip to computer"**.
+4. Extraia o conteúdo do arquivo `.zip` dentro da pasta do projeto em:
+   ```text
+   biociclo-ia/data/garbage-classification-3/
+   ```
+
+#### 🔹 Opção B: Download Automático via Terminal (com Chave de API)
 1. Copie o arquivo de variáveis de ambiente:
    ```bash
    cp .env.example .env
    ```
-2. Adicione sua chave de API gratuita do Roboflow no arquivo `.env`.
-3. Execute o download automatizado:
+2. Adicione sua chave gratuita do Roboflow no arquivo `.env` (`ROBOFLOW_API_KEY=sua_chave`).
+3. Execute o script automático:
    ```bash
    python -m src.data.download_dataset
    ```
+
+#### 🔹 Opção C: Apenas Testar a Interface (Sem Baixar o Dataset Completo)
+Se você ou um colega quiser apenas testar a interface, as regras de negócio e a classificação sem treinar o modelo:
+- Não é necessário baixar o dataset completo!
+- O repositório já inclui fotos de teste reais na pasta `data/samples/` para experimentação imediata no Streamlit.
 
 ### Treinar o Modelo YOLO:
 ```bash
