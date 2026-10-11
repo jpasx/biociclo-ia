@@ -47,9 +47,9 @@ with st.sidebar:
     st.subheader("⚙️ Parâmetros do Modelo")
     conf_thresh = st.slider(
         "Limiar de Confiança (Threshold)",
-        min_value=0.10,
+        min_value=0.05,
         max_value=0.95,
-        value=0.45,
+        value=0.25,
         step=0.05,
         help="Detecções com probabilidade inferior a este valor serão alertadas como incertas para solicitar nova foto.",
     )
@@ -57,10 +57,13 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("🤖 Status do Modelo")
     if detector.is_custom_model:
-        st.success(f"Modelo customizado: **{detector.model_name}**")
+        st.success(f"Modelo treinado: **{detector.model_name}**")
     else:
-        st.info(f"Modelo base: **{detector.model_name}**")
-        st.caption("Dica: Treine o modelo com `python -m src.training.train_yolo` para gerar pesos customizados (`best.pt`).")
+        st.warning("⚠️ **Modo Demonstração (COCO Pré-treinado)**")
+        st.caption(
+            "O modelo atual ainda é o genérico. Para reconhecer com alta precisão as 6 classes de resíduos "
+            "do BioCiclo, treine o modelo com o dataset baixado!"
+        )
 
     st.markdown("---")
     st.markdown(
