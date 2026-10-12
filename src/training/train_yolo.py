@@ -20,6 +20,9 @@ def train(
     imgsz: int = 640,
     patience: int = 15,
     device: str = "0",  # ou "cpu"
+    fraction: float = 1.0,
+    workers: int = 4,
+    val: bool = True,
 ):
     try:
         from ultralytics import YOLO
@@ -59,6 +62,9 @@ def train(
         imgsz=imgsz,
         patience=patience,
         device=device,
+        fraction=fraction,
+        workers=workers,
+        val=val,
         project=str(PROJECT_ROOT / "runs" / "train"),
         name="biociclo_yolo",
         exist_ok=True,
@@ -67,9 +73,12 @@ def train(
     # Copiar o melhor modelo resultante para models/weights/best.pt
     WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
     best_pt = PROJECT_ROOT / "runs" / "train" / "biociclo_yolo" / "weights" / "best.pt"
-    if best_pt.exists():
+    last_pt = PROJECT_ROOT / "runs" / "train" / "biociclo_yolo" / "weights" / "last.pt"
+    source_pt = best_pt if best_pt.exists() else last_pt
+
+    if source_pt.exists():
         target_path = WEIGHTS_DIR / "best.pt"
-        shutil.copy(best_pt, target_path)
+        shutil.copy(source_pt, target_path)
         print("\n" + "=" * 70)
         print(f"[SUCESSO] Treinamento concluído com êxito!")
         print(f"Melhor modelo exportado para: {target_path}")
@@ -85,6 +94,9 @@ if __name__ == "__main__":
     parser.add_argument("--batch", type=int, default=16, help="Tamanho do lote (batch size)")
     parser.add_argument("--imgsz", type=int, default=640, help="Tamanho das imagens")
     parser.add_argument("--device", type=str, default="cpu", help="'cpu' ou ID da GPU (ex: '0')")
+    parser.add_argument("--fraction", type=float, default=1.0, help="Fração do dataset a utilizar (ex: 0.1 para 10%)")
+    parser.add_argument("--workers", type=int, default=4, help="Número de workers do dataloader")
+    parser.add_argument("--no-val", action="store_true", help="Pular validação por época para acelerar treino no CPU")
     args = parser.parse_args()
 
     train(
@@ -94,4 +106,7 @@ if __name__ == "__main__":
         batch=args.batch,
         imgsz=args.imgsz,
         device=args.device,
+        fraction=args.fraction,
+        workers=args.workers,
+        val=not args.no_val,
     )
