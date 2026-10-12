@@ -29,12 +29,16 @@ st.set_page_config(
 
 inject_styles()
 
+from src.config import DEFAULT_MODEL_WEIGHTS
+
 @st.cache_resource(show_spinner="Carregando modelo de Inteligência Artificial...")
-def load_detector():
-    """Carrega o detector YOLO em cache para inicialização rápida."""
+def load_detector(model_mtime: float):
+    """Carrega o detector YOLO em cache, invalidando automaticamente quando os pesos mudam."""
     return WasteDetector()
 
-detector = load_detector()
+weights_path = Path(DEFAULT_MODEL_WEIGHTS)
+mtime = weights_path.stat().st_mtime if weights_path.exists() else 0.0
+detector = load_detector(mtime)
 
 # ==============================================================================
 # BARRA LATERAL (CONFIGURAÇÕES E CONTEXTO)
