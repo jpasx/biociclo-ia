@@ -53,7 +53,7 @@ RULES_DATABASE: Dict[str, Dict[str, Any]] = {
     },
     "PAPER": {
         "display_name": "Papel",
-        "waste_type": "Reciclável (Comum)",
+        "waste_type": "Reciclável",
         "destination": "Coleta Seletiva / Reciclagem",
         "action_color": "#1E88E5",  # Azul
         "guidance": (
@@ -66,7 +66,7 @@ RULES_DATABASE: Dict[str, Dict[str, Any]] = {
     },
     "CARDBOARD": {
         "display_name": "Papelão",
-        "waste_type": "Reciclável (Comum)",
+        "waste_type": "Reciclável",
         "destination": "Coleta Seletiva / Reciclagem",
         "action_color": "#8D6E63",  # Marrom
         "guidance": (
@@ -80,7 +80,7 @@ RULES_DATABASE: Dict[str, Dict[str, Any]] = {
     },
     "PLASTIC": {
         "display_name": "Plástico",
-        "waste_type": "Reciclável (Comum)",
+        "waste_type": "Reciclável",
         "destination": "Coleta Seletiva / Reciclagem",
         "action_color": "#E53935",  # Vermelho
         "guidance": (
@@ -94,7 +94,7 @@ RULES_DATABASE: Dict[str, Dict[str, Any]] = {
     },
     "METAL": {
         "display_name": "Metal / Alumínio",
-        "waste_type": "Reciclável (Comum)",
+        "waste_type": "Reciclável",
         "destination": "Coleta Seletiva / Reciclagem",
         "action_color": "#F9A825",  # Amarelo
         "guidance": (
@@ -108,7 +108,7 @@ RULES_DATABASE: Dict[str, Dict[str, Any]] = {
     },
     "GLASS": {
         "display_name": "Vidro",
-        "waste_type": "Reciclável (Comum)",
+        "waste_type": "Reciclável",
         "destination": "Coleta Seletiva / Reciclagem",
         "action_color": "#00897B",  # Verde água/Ciano
         "guidance": (
@@ -133,7 +133,7 @@ RULES_DATABASE: Dict[str, Dict[str, Any]] = {
         ],
     },
     "TRASH": {
-        "display_name": "Rejeito (Lixo Comum)",
+        "display_name": "Rejeito / Não Reciclável",
         "waste_type": "Rejeito",
         "destination": "Coleta Convencional / Aterro Sanitário",
         "action_color": "#616161",  # Cinza

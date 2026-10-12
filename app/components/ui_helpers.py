@@ -104,11 +104,16 @@ def render_advice_card(advice: DestinationAdvice, confidence: float):
         st.markdown(
             f"""
             <div class="card-result" style="border-left-color: {advice.action_color};">
-                <span class="badge {badge_class}">{advice.waste_type}</span>
-                <span class="badge" style="background-color: {advice.action_color};">{advice.display_name}</span>
-                <h3 style="margin-top: 0.8rem; color: #1e293b;">{icon} Destinação Recomendada:</h3>
-                <h4 style="color: {advice.action_color}; margin-top: -0.5rem;">{advice.destination}</h4>
-                <p style="color: #4b5563; font-size: 0.95rem;">{advice.guidance}</p>
+                <span style="font-size: 0.85rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">Material Identificado</span>
+                <h2 style="margin: 0.2rem 0 0.6rem 0; color: #0f172a; font-size: 1.8rem; font-weight: 800;">{icon} {advice.display_name}</h2>
+                <div style="margin-bottom: 0.8rem;">
+                    <span class="badge {badge_class}">Classificação: {advice.waste_type}</span>
+                    <span class="badge" style="background-color: {advice.action_color};">{advice.destination}</span>
+                </div>
+                <div class="destination-box">
+                    <h4 style="margin: 0 0 0.3rem 0; color: {advice.action_color}; font-size: 1.05rem;">🎯 Onde descartar: {advice.destination}</h4>
+                    <p style="margin: 0; color: #334155; font-size: 0.95rem; line-height: 1.4;">{advice.guidance}</p>
+                </div>
             </div>
             """,
             unsafe_allow_html=True,
