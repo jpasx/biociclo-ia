@@ -28,6 +28,7 @@ datasets/
 # Pesos pesados do modelo e execuções de treinamento do YOLO
 models/weights/*.pt
 !models/weights/.gitkeep
+!models/weights/best.pt
 runs/
 *.pt
 *.onnx
