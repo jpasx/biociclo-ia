@@ -105,21 +105,72 @@ class WasteDetector:
 
         # 1. Se foi passado caminho específico e existe
         if model_path and Path(model_path).exists():
-            self.model = self._yolo_class(model_path)
-            self.is_custom_model = True
-            self.model_name = Path(model_path).name
-            return
+            try:
+                self.model = self._yolo_class(model_path)
+                self.is_custom_model = True
+                self.model_name = Path(model_path).name
+                return
+            except Exception as e:
+                print(f"Erro ao carregar modelo customizado {model_path}: {e}")
 
-        # 2. Se existe o peso padrão treinado em models/weights/best.pt
-        if DEFAULT_MODEL_WEIGHTS.exists():
-            self.model = self._yolo_class(str(DEFAULT_MODEL_WEIGHTS))
-            self.is_custom_model = True
-            self.model_name = "best.pt (Modelo Treinado BioCiclo)"
-            return
+        # 2. Buscar o arquivo best.pt em múltiplos locais possíveis
+        candidate_paths = [
+            DEFAULT_MODEL_WEIGHTS,
+            PROJECT_ROOT / "models" / "weights" / "best.pt",
+            Path.cwd() / "models" / "weights" / "best.pt",
+            Path("models/weights/best.pt"),
+            Path(__file__).resolve().parent.parent / "models" / "weights" / "best.pt",
+        ]
 
-        # 3. Fallback: carregar modelo base YOLO para demonstração inicial
+        weights_file = None
+        for p in candidate_paths:
+            try:
+                if p.is_file() and p.stat().st_size > 1000000:
+                    weights_file = p.resolve()
+                    break
+            except Exception:
+                pass
+
+        # Se ainda não encontrou, busca recursiva
+        if not weights_file:
+            try:
+                matches = list(Path.cwd().glob("**/best.pt")) + list(PROJECT_ROOT.glob("**/best.pt"))
+                for m in matches:
+                    if m.is_file() and m.stat().st_size > 1000000:
+                        weights_file = m.resolve()
+                        break
+            except Exception:
+                pass
+
+        # 3. Se ainda não tem o arquivo localmente no servidor da nuvem, baixa automaticamente do GitHub
+        if not weights_file:
+            try:
+                import urllib.request
+                target_dest = DEFAULT_MODEL_WEIGHTS
+                target_dest.parent.mkdir(parents=True, exist_ok=True)
+                url = "https://raw.githubusercontent.com/jpasx/biociclo-ia/main/models/weights/best.pt"
+                print(f"Baixando best.pt automaticamente do GitHub para: {target_dest}")
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=30) as resp, open(target_dest, "wb") as out_f:
+                    out_f.write(resp.read())
+
+                if target_dest.exists() and target_dest.stat().st_size > 1000000:
+                    weights_file = target_dest.resolve()
+            except Exception as e:
+                print(f"Não foi possível baixar best.pt automaticamente: {e}")
+
+        # 4. Tentar carregar os pesos treinados
+        if weights_file and weights_file.exists():
+            try:
+                self.model = self._yolo_class(str(weights_file))
+                self.is_custom_model = True
+                self.model_name = "best.pt (Modelo Treinado BioCiclo)"
+                return
+            except Exception as e:
+                print(f"Erro ao inicializar YOLO com {weights_file}: {e}")
+
+        # 5. Fallback para modelo base demonstrativo
         try:
-            # Tenta carregar yolo11n ou yolov8n
             self.model = self._yolo_class("yolo11n.pt")
             self.is_custom_model = False
             self.model_name = "YOLO11n (Modo Demonstração Pré-treinado)"

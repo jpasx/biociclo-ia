@@ -53,7 +53,7 @@ with st.sidebar:
         "Limiar de Confiança (Threshold)",
         min_value=0.05,
         max_value=0.95,
-        value=0.25,
+        value=0.15,
         step=0.05,
         help="Detecções com probabilidade inferior a este valor serão alertadas como incertas para solicitar nova foto.",
     )
@@ -64,10 +64,10 @@ with st.sidebar:
         st.success(f"Modelo treinado: **{detector.model_name}**")
     else:
         st.warning("⚠️ **Modo Demonstração (COCO Pré-treinado)**")
-        st.caption(
-            "O modelo atual ainda é o genérico. Para reconhecer com alta precisão as 6 classes de resíduos "
-            "do BioCiclo, treine o modelo com o dataset baixado!"
-        )
+        st.caption("Clique no botão abaixo para forçar o carregamento do modelo treinado oficial:")
+        if st.button("🔄 Carregar Modelo BioCiclo (best.pt)"):
+            st.cache_resource.clear()
+            st.rerun()
 
     st.markdown("---")
     st.markdown(
