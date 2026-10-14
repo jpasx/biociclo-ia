@@ -7,24 +7,24 @@ from src.rules.destination import DestinationAdvice
 
 CUSTOM_CSS = """
 <style>
-    /* Estilos gerais */
+    /* Estilos gerais adaptáveis a dark/light mode */
     .main-title {
         font-size: 2.2rem;
         font-weight: 700;
-        color: #1b5e20;
+        color: #4CAF50;
         margin-bottom: 0.2rem;
     }
     .subtitle {
         font-size: 1.05rem;
-        color: #4a5568;
+        opacity: 0.85;
         margin-bottom: 1.5rem;
     }
     .card-result {
-        background: #f8fafc;
+        background: rgba(128, 128, 128, 0.08);
         border-radius: 12px;
         padding: 1.2rem;
-        border-left: 6px solid #2e7d32;
-        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.06);
+        border-left: 6px solid #4CAF50;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.2);
         margin-bottom: 1rem;
     }
     .badge {
@@ -46,24 +46,22 @@ CUSTOM_CSS = """
         background-color: #616161;
     }
     .destination-box {
-        background: #e8f5e9;
-        border: 1px solid #c8e6c9;
+        background: rgba(46, 125, 50, 0.15);
+        border: 1px solid rgba(46, 125, 50, 0.35);
         border-radius: 10px;
         padding: 1rem;
         margin-top: 0.8rem;
     }
     .warning-box {
-        background: #fff8e1;
+        background: rgba(255, 179, 0, 0.15);
         border-left: 5px solid #ffb300;
         border-radius: 8px;
         padding: 1rem;
         margin: 1rem 0;
-        color: #795548;
     }
     .tip-item {
         margin-bottom: 0.3rem;
         font-size: 0.92rem;
-        color: #374151;
     }
 </style>
 """

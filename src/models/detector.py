@@ -10,6 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
 from src.config import (
+    PROJECT_ROOT,
     DEFAULT_MODEL_WEIGHTS,
     DEFAULT_CONFIDENCE_THRESHOLD,
     DEFAULT_IOU_THRESHOLD,
