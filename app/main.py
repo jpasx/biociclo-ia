@@ -32,13 +32,18 @@ inject_styles()
 from src.config import DEFAULT_MODEL_WEIGHTS
 
 @st.cache_resource(show_spinner="Carregando modelo de Inteligência Artificial...")
-def load_detector(model_mtime: float):
-    """Carrega o detector YOLO em cache, invalidando automaticamente quando os pesos mudam."""
+def get_cached_detector():
+    """Carrega e mantém o detector YOLO em cache de recursos."""
     return WasteDetector()
 
-weights_path = Path(DEFAULT_MODEL_WEIGHTS)
-mtime = weights_path.stat().st_mtime if weights_path.exists() else 0.0
-detector = load_detector(mtime)
+detector = get_cached_detector()
+
+# Se o detector em cache não for o modelo customizado, tenta recriar
+if not detector.is_custom_model:
+    fresh_det = WasteDetector()
+    if fresh_det.is_custom_model:
+        detector = fresh_det
+        st.cache_resource.clear()
 
 # ==============================================================================
 # BARRA LATERAL (CONFIGURAÇÕES E CONTEXTO)
@@ -62,9 +67,11 @@ with st.sidebar:
     st.subheader("🤖 Status do Modelo")
     if detector.is_custom_model:
         st.success(f"Modelo treinado: **{detector.model_name}**")
+        st.caption("Classes: *Orgânico, Papelão, Vidro, Metal, Papel, Plástico*")
     else:
         st.warning("⚠️ **Modo Demonstração (COCO Pré-treinado)**")
-        st.caption("Clique no botão abaixo para forçar o carregamento do modelo treinado oficial:")
+        if getattr(detector, "load_error", None):
+            st.caption(f"Motivo: `{detector.load_error}`")
         if st.button("🔄 Carregar Modelo BioCiclo (best.pt)"):
             st.cache_resource.clear()
             st.rerun()

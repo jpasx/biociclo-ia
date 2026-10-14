@@ -90,13 +90,15 @@ class WasteDetector:
         self.model = None
         self.is_custom_model = False
         self.model_name = ""
+        self.load_error: Optional[str] = None
 
         # Verificar se ultralytics está disponível
         try:
             from ultralytics import YOLO
             self._yolo_class = YOLO
-        except ImportError:
+        except ImportError as err:
             self._yolo_class = None
+            self.load_error = f"Ultralytics não instalado: {err}"
 
         self._load_model(model_path)
 
@@ -110,17 +112,21 @@ class WasteDetector:
                 self.model = self._yolo_class(model_path)
                 self.is_custom_model = True
                 self.model_name = Path(model_path).name
+                self.load_error = None
                 return
             except Exception as e:
-                print(f"Erro ao carregar modelo customizado {model_path}: {e}")
+                self.load_error = f"Erro ao carregar modelo customizado {model_path}: {e}"
+                print(self.load_error)
 
         # 2. Buscar o arquivo best.pt em múltiplos locais possíveis
         candidate_paths = [
             DEFAULT_MODEL_WEIGHTS,
             PROJECT_ROOT / "models" / "weights" / "best.pt",
             Path.cwd() / "models" / "weights" / "best.pt",
-            Path("models/weights/best.pt"),
-            Path(__file__).resolve().parent.parent / "models" / "weights" / "best.pt",
+            Path("models/weights/best.pt").resolve(),
+            Path(__file__).resolve().parent.parent.parent / "models" / "weights" / "best.pt",
+            Path("/mount/src/biociclo-ia/models/weights/best.pt"),
+            Path("/app/biociclo-ia/models/weights/best.pt"),
         ]
 
         weights_file = None
@@ -132,13 +138,19 @@ class WasteDetector:
             except Exception:
                 pass
 
-        # Se ainda não encontrou, busca recursiva
+        # Se ainda não encontrou, busca recursiva a partir da raiz do projeto e cwd
         if not weights_file:
             try:
-                matches = list(Path.cwd().glob("**/best.pt")) + list(PROJECT_ROOT.glob("**/best.pt"))
-                for m in matches:
-                    if m.is_file() and m.stat().st_size > 1000000:
-                        weights_file = m.resolve()
+                for base in [PROJECT_ROOT, Path.cwd(), Path(__file__).resolve().parent.parent.parent]:
+                    if base.exists():
+                        for m in base.rglob("best.pt"):
+                            try:
+                                if m.is_file() and m.stat().st_size > 1000000:
+                                    weights_file = m.resolve()
+                                    break
+                            except Exception:
+                                pass
+                    if weights_file:
                         break
             except Exception:
                 pass
@@ -147,30 +159,35 @@ class WasteDetector:
         if not weights_file:
             try:
                 import urllib.request
-                target_dest = DEFAULT_MODEL_WEIGHTS
+                target_dest = PROJECT_ROOT / "models" / "weights" / "best.pt"
                 target_dest.parent.mkdir(parents=True, exist_ok=True)
                 url = "https://raw.githubusercontent.com/jpasx/biociclo-ia/main/models/weights/best.pt"
                 print(f"Baixando best.pt automaticamente do GitHub para: {target_dest}")
                 req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-                with urllib.request.urlopen(req, timeout=30) as resp, open(target_dest, "wb") as out_f:
+                with urllib.request.urlopen(req, timeout=45) as resp, open(target_dest, "wb") as out_f:
                     out_f.write(resp.read())
 
                 if target_dest.exists() and target_dest.stat().st_size > 1000000:
                     weights_file = target_dest.resolve()
             except Exception as e:
+                self.load_error = f"Download falhou: {e}"
                 print(f"Não foi possível baixar best.pt automaticamente: {e}")
 
         # 4. Tentar carregar os pesos treinados
-        if weights_file and weights_file.exists():
+        if weights_file and Path(weights_file).exists():
             try:
                 self.model = self._yolo_class(str(weights_file))
                 self.is_custom_model = True
                 self.model_name = "best.pt (Modelo Treinado BioCiclo)"
+                self.load_error = None
                 return
             except Exception as e:
-                print(f"Erro ao inicializar YOLO com {weights_file}: {e}")
+                self.load_error = f"Erro ao instanciar YOLO('{weights_file}'): {e}"
+                print(self.load_error)
 
         # 5. Fallback para modelo base demonstrativo
+        if not self.load_error:
+            self.load_error = "Arquivo best.pt não localizado nos caminhos do servidor."
         try:
             self.model = self._yolo_class("yolo11n.pt")
             self.is_custom_model = False
