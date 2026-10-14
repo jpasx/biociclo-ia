@@ -143,6 +143,11 @@ with tab_pred:
 
     # Processamento e inferência
     if image_to_process is not None:
+        from PIL import ImageOps
+        try:
+            image_to_process = ImageOps.exif_transpose(image_to_process)
+        except Exception:
+            pass
         st.markdown("---")
         with st.spinner("Processando imagem e executando modelo YOLO..."):
             all_dets, primary_det = detector.predict(image_to_process, conf_threshold=conf_thresh)
