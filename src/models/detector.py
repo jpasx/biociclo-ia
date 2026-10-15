@@ -258,8 +258,9 @@ class WasteDetector:
             )
             detections.append(det)
 
-        # Determinar resíduo principal (prioridade para maior confiança)
-        primary_detection = max(detections, key=lambda d: d.confidence) if detections else None
+        # Ordenar por maior confiança e determinar resíduo principal
+        detections.sort(key=lambda d: d.confidence, reverse=True)
+        primary_detection = detections[0] if detections else None
         return detections, primary_detection
 
     def annotate_image(
@@ -269,44 +270,52 @@ class WasteDetector:
     ) -> Image.Image:
         """
         Desenha as caixas delimitadoras e rótulos na imagem com cores estilizadas.
+        Em cenas com muitos objetos (>5), exibe rótulos de texto apenas nas 3 principais
+        detecções para preservar a legibilidade visual da imagem.
         """
         annotated = image.copy().convert("RGB")
         draw = ImageDraw.Draw(annotated)
 
-        # Tentar usar uma fonte TrueType ou fonte padrão do PIL
         try:
             font = ImageFont.load_default()
         except Exception:
             font = None
 
-        for det in detections:
+        sorted_dets = sorted(detections, key=lambda d: d.confidence, reverse=True)
+        max_labeled = 3 if len(sorted_dets) > 5 else len(sorted_dets)
+
+        # Desenhar primeiro as caixas secundárias e por último as principais no topo
+        for idx in range(len(sorted_dets) - 1, -1, -1):
+            det = sorted_dets[idx]
             x1, y1, x2, y2 = det.box
             cls_key = det.class_name.upper()
-            color = CLASS_COLORS.get(cls_key, "#4CAF50")
-            display = det.advice.display_name
-            conf_percent = f"{det.confidence * 100:.1f}%"
-            label = f"{display}: {conf_percent}"
+            color = CLASS_COLORS.get(cls_key, "#2EA043")
+            is_top = idx < max_labeled
 
-            # Desenhar retângulo espesso
-            for offset in range(3):
+            thickness = 3 if is_top else 1
+            for offset in range(thickness):
                 draw.rectangle(
                     [x1 - offset, y1 - offset, x2 + offset, y2 + offset],
                     outline=color,
                 )
 
-            # Desenhar fundo do texto
-            text_bbox = draw.textbbox((x1, y1), label, font=font)
-            text_w = text_bbox[2] - text_bbox[0]
-            text_h = text_bbox[3] - text_bbox[1]
-            draw.rectangle(
-                [x1, max(0, y1 - text_h - 6), x1 + text_w + 10, y1],
-                fill=color,
-            )
-            draw.text(
-                (x1 + 5, max(0, y1 - text_h - 4)),
-                label,
-                fill="#FFFFFF",
-                font=font,
-            )
+            if is_top:
+                display = det.advice.display_name
+                conf_percent = f"{det.confidence * 100:.1f}%"
+                label = f"{display}: {conf_percent}"
+
+                text_bbox = draw.textbbox((x1, y1), label, font=font)
+                text_w = text_bbox[2] - text_bbox[0]
+                text_h = text_bbox[3] - text_bbox[1]
+                draw.rectangle(
+                    [x1, max(0, y1 - text_h - 6), x1 + text_w + 10, max(text_h + 6, y1)],
+                    fill=color,
+                )
+                draw.text(
+                    (x1 + 5, max(2, y1 - text_h - 4)),
+                    label,
+                    fill="#FFFFFF",
+                    font=font,
+                )
 
         return annotated
