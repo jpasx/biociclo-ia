@@ -15,8 +15,12 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+import importlib
 from src.models.detector import WasteDetector
 from src.rules.destination import RULES_DATABASE
+import app.components.ui_helpers as _ui_helpers
+
+importlib.reload(_ui_helpers)
 from app.components.ui_helpers import (
     inject_styles,
     render_header,
