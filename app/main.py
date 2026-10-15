@@ -7,7 +7,7 @@ Disciplina: Fundamentos da Inteligência Artificial
 
 import sys
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageOps
 import streamlit as st
 
 # Garantir que a raiz do projeto esteja no PYTHONPATH
@@ -17,24 +17,29 @@ if str(ROOT_DIR) not in sys.path:
 
 from src.models.detector import WasteDetector
 from src.rules.destination import RULES_DATABASE
-from app.components.ui_helpers import inject_styles, render_advice_card
+from app.components.ui_helpers import (
+    inject_styles,
+    render_header,
+    render_empty_state,
+    render_no_detection_state,
+    render_advice_card,
+)
 
 # Configuração da página do Streamlit
 st.set_page_config(
-    page_title="BioCiclo IA | Classificação de Resíduos",
-    page_icon="♻️",
+    page_title="BioCiclo IA | Sistema de Triagem de Resíduos",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 inject_styles()
 
-from src.config import DEFAULT_MODEL_WEIGHTS
 
-@st.cache_resource(show_spinner="Carregando modelo de Inteligência Artificial...")
+@st.cache_resource(show_spinner="Inicializando motor de inferência...")
 def get_cached_detector():
     """Carrega e mantém o detector YOLO em cache de recursos."""
     return WasteDetector()
+
 
 detector = get_cached_detector()
 
@@ -45,212 +50,337 @@ if not detector.is_custom_model:
         detector = fresh_det
         st.cache_resource.clear()
 
+
+# Mapeamento descritivo para o catálogo de amostras
+SAMPLE_DESCRIPTIONS = {
+    "exemplo_plastic.jpg": "Amostra 01 — Plástico (Garrafa PET)",
+    "exemplo_paper.jpg": "Amostra 02 — Papel (Descartáveis / Celulose)",
+    "exemplo_metal.jpg": "Amostra 03 — Metal (Lata de Alumínio)",
+    "exemplo_glass.jpg": "Amostra 04 — Vidro (Recipiente Transparente)",
+    "exemplo_cardboard.jpg": "Amostra 05 — Papelão (Caixa / Embalagem)",
+    "exemplo_biodegradable.jpg": "Amostra 06 — Orgânico / Biodegradável (Hortifruti)",
+    "amostra_organico_maca.bmp": "Amostra 07 — Orgânico (Resíduo de Fruta)",
+    "amostra_plastico_garrafa.bmp": "Amostra 08 — Plástico (Embalagem Rígida)",
+    "amostra_papelao_caixa.bmp": "Amostra 09 — Papelão (Estrutura Secundária)",
+}
+
+
 # ==============================================================================
-# BARRA LATERAL (CONFIGURAÇÕES E CONTEXTO)
+# BARRA LATERAL (PAINEL DE CONTROLE E PARÂMETROS)
 # ==============================================================================
 with st.sidebar:
-    st.markdown("## 🌿 BioCiclo IA")
-    st.caption("Apoio ao programa **BioCiclo Urbano** (Aracaju/EMSURB)")
-    st.markdown("---")
+    st.markdown(
+        """
+        <div style="margin-bottom: 1.25rem;">
+            <div class="header-kicker" style="margin-bottom: 0.2rem;">Sistema de Triagem</div>
+            <div style="font-size: 1.3rem; font-weight: 700; color: #F0F6FC; letter-spacing: -0.01em;">BioCiclo IA</div>
+            <div style="font-size: 0.8rem; color: #8B949E; margin-top: 0.15rem;">
+                Apoio técnico ao programa BioCiclo Urbano (Aracaju / EMSURB)
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    st.subheader("⚙️ Parâmetros do Modelo")
+    st.markdown('<div class="section-label">Motor de Inferência</div>', unsafe_allow_html=True)
+    if detector.is_custom_model:
+        st.markdown(
+            f"""
+            <div class="sidebar-status-card">
+                <div class="status-row">
+                    <span class="status-dot dot-online"></span>
+                    <span class="status-label">Modelo Operacional Ativo</span>
+                </div>
+                <p class="status-sub">Pesos: {detector.model_name}</p>
+                <p class="status-sub" style="margin-top: 0.25rem;">
+                    Classes: Orgânico, Papelão, Vidro, Metal, Papel e Plástico
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        err_detail = getattr(detector, "load_error", None) or "Pesos customizados não carregados."
+        st.markdown(
+            f"""
+            <div class="sidebar-status-card">
+                <div class="status-row">
+                    <span class="status-dot dot-fallback"></span>
+                    <span class="status-label">Modo de Contingência (COCO)</span>
+                </div>
+                <p class="status-sub">{err_detail}</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.button("Recarregar Pesos do Modelo (best.pt)", use_container_width=True):
+            st.cache_resource.clear()
+            st.rerun()
+
+    st.markdown("---")
+    st.markdown('<div class="section-label">Parâmetros de Detecção</div>', unsafe_allow_html=True)
     conf_thresh = st.slider(
         "Limiar de Confiança (Threshold)",
         min_value=0.05,
         max_value=0.95,
         value=0.15,
         step=0.05,
-        help="Detecções com probabilidade inferior a este valor serão alertadas como incertas para solicitar nova foto.",
+        help="Define a probabilidade mínima exigida para validar uma detecção. Valores abaixo deste limiar acionam recomendação de revisão.",
+    )
+    st.caption(
+        f"Limiar atual configurado em {conf_thresh * 100:.0f}%. Detecções abaixo de 50% exibem alerta preventivo de segurança."
     )
 
     st.markdown("---")
-    st.subheader("🤖 Status do Modelo")
-    if detector.is_custom_model:
-        st.success(f"Modelo treinado: **{detector.model_name}**")
-        st.caption("Classes: *Orgânico, Papelão, Vidro, Metal, Papel, Plástico*")
-    else:
-        st.warning("⚠️ **Modo Demonstração (COCO Pré-treinado)**")
-        if getattr(detector, "load_error", None):
-            st.caption(f"Motivo: `{detector.load_error}`")
-        if st.button("🔄 Carregar Modelo BioCiclo (best.pt)"):
-            st.cache_resource.clear()
-            st.rerun()
-
-    st.markdown("---")
+    st.markdown('<div class="section-label">Informações Institucionais</div>', unsafe_allow_html=True)
     st.markdown(
         """
-        **Desenvolvido para:**  
-        🎓 UFS - Dep. de Computação  
-        📚 Fundamentos da Inteligência Artificial  
-        📍 São Cristóvão / Aracaju - SE
-        """
+        <div class="sidebar-status-card" style="margin-bottom: 0;">
+            <p class="status-sub" style="color: #C9D1D9; font-weight: 600; margin-bottom: 0.2rem;">
+                Universidade Federal de Sergipe (UFS)
+            </p>
+            <p class="status-sub">Departamento de Computação (DComp)</p>
+            <p class="status-sub">Disciplina: Fundamentos da Inteligência Artificial</p>
+            <p class="status-sub" style="margin-top: 0.35rem; color: #6E7681;">São Cristóvão / Aracaju &mdash; SE</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
 
 # ==============================================================================
-# CABEÇALHO PRINCIPAL
+# CABEÇALHO E NAVEGAÇÃO PRINCIPAL
 # ==============================================================================
-st.markdown('<h1 class="main-title">♻️ BioCiclo IA: Triagem Inteligente de Resíduos</h1>', unsafe_allow_html=True)
-st.markdown(
-    '<p class="subtitle">Identificação automática de materiais por visão computacional e direcionamento para '
-    '<strong>Compostagem (BioCiclo Urbano)</strong> ou <strong>Coleta Seletiva</strong>.</p>',
-    unsafe_allow_html=True,
-)
+render_header()
 
 tab_pred, tab_rules, tab_about = st.tabs([
-    "📸 Classificação & Destinação",
-    "📋 Tabela de Regras (BioCiclo Urbano)",
-    "ℹ️ Sobre o Projeto & Metodologia",
+    "Classificação e Triagem",
+    "Matriz de Diretrizes (BioCiclo Urbano)",
+    "Arquitetura e Escopo do Projeto",
 ])
 
 # ==============================================================================
-# ABA 1: CLASSIFICAÇÃO & PREDIÇÃO
+# ABA 1: CLASSIFICAÇÃO E TRIAGEM
 # ==============================================================================
 with tab_pred:
-    st.markdown("### Envie uma fotografia do resíduo")
-    
-    input_method = st.radio(
-        "Escolha a forma de captura:",
-        ["📁 Upload de Imagem", "📷 Câmera (Webcam)", "🧪 Amostras de Teste"],
-        horizontal=True,
-    )
+    col_input, col_output = st.columns([1, 1.15], gap="large")
 
     image_to_process = None
 
-    if input_method == "📁 Upload de Imagem":
-        uploaded_file = st.file_uploader(
-            "Selecione uma imagem (JPG, JPEG, PNG):",
-            type=["jpg", "jpeg", "png"],
-            help="Tire uma foto clara do resíduo principal sobre fundo neutro ou superfície limpa.",
-        )
-        if uploaded_file is not None:
-            image_to_process = Image.open(uploaded_file)
+    with col_input:
+        st.markdown('<div class="section-heading">1. Fonte de Imagem e Inspeção</div>', unsafe_allow_html=True)
 
-    elif input_method == "📷 Câmera (Webcam)":
-        camera_file = st.camera_input("Fotografe o resíduo para análise:")
-        if camera_file is not None:
-            image_to_process = Image.open(camera_file)
-
-    elif input_method == "🧪 Amostras de Teste":
-        samples_dir = ROOT_DIR / "data" / "samples"
-        sample_files = (
-            list(samples_dir.glob("*.jpg"))
-            + list(samples_dir.glob("*.png"))
-            + list(samples_dir.glob("*.bmp"))
+        input_method = st.radio(
+            "Selecione o método de entrada:",
+            ["Upload de Arquivo", "Captura por Câmera", "Catálogo de Amostras"],
+            horizontal=True,
         )
-        if sample_files:
-            selected_sample_name = st.selectbox(
-                "Selecione uma amostra para teste imediato:",
-                [f.name for f in sample_files],
+
+        if input_method == "Upload de Arquivo":
+            uploaded_file = st.file_uploader(
+                "Envie uma imagem do resíduo (formatos suportados: JPG, JPEG, PNG):",
+                type=["jpg", "jpeg", "png"],
+                help="Fotografe o resíduo de forma centralizada e sob iluminação uniforme.",
             )
-            selected_path = samples_dir / selected_sample_name
-            image_to_process = Image.open(selected_path)
-        else:
-            st.info("Nenhuma imagem encontrada em data/samples/. Adicione imagens de teste na pasta para visualizá-las aqui.")
+            if uploaded_file is not None:
+                image_to_process = Image.open(uploaded_file)
 
-    # Processamento e inferência
+        elif input_method == "Captura por Câmera":
+            camera_file = st.camera_input("Posicione o resíduo diante da câmera para captura:")
+            if camera_file is not None:
+                image_to_process = Image.open(camera_file)
+
+        elif input_method == "Catálogo de Amostras":
+            samples_dir = ROOT_DIR / "data" / "samples"
+            raw_files = (
+                list(samples_dir.glob("*.jpg"))
+                + list(samples_dir.glob("*.png"))
+                + list(samples_dir.glob("*.bmp"))
+            )
+            # Ordenar priorizando os exemplos principais do dataset
+            sample_files = sorted(
+                raw_files,
+                key=lambda f: (0 if f.name.startswith("exemplo_") else 1, f.name),
+            )
+            if sample_files:
+                file_map = {
+                    SAMPLE_DESCRIPTIONS.get(f.name, f.name): f
+                    for f in sample_files
+                }
+                selected_label = st.selectbox(
+                    "Selecione uma amostra homologada para validação imediata:",
+                    list(file_map.keys()),
+                )
+                selected_path = file_map[selected_label]
+                image_to_process = Image.open(selected_path)
+            else:
+                st.info("Nenhuma imagem de amostra encontrada no diretório data/samples/.")
+
+    # Execução da inferência quando há imagem selecionada
+    all_dets = []
+    primary_det = None
+
     if image_to_process is not None:
-        from PIL import ImageOps
         try:
             image_to_process = ImageOps.exif_transpose(image_to_process)
         except Exception:
             pass
-        st.markdown("---")
-        with st.spinner("Processando imagem e executando modelo YOLO..."):
+
+        with st.spinner("Executando inferência por visão computacional..."):
             all_dets, primary_det = detector.predict(image_to_process, conf_threshold=conf_thresh)
 
-        col_img, col_info = st.columns([1, 1], gap="medium")
-
-        with col_img:
-            st.markdown("#### Imagem Analisada")
+        with col_input:
+            st.markdown('<div class="section-label" style="margin-top: 0.75rem;">Visualização da Detecção</div>', unsafe_allow_html=True)
             if all_dets:
                 annotated_img = detector.annotate_image(image_to_process, all_dets)
-                st.image(annotated_img, use_container_width=True, caption=f"{len(all_dets)} objeto(s) detectado(s)")
+                st.image(
+                    annotated_img,
+                    use_container_width=True,
+                    caption=f"Imagem processada — {len(all_dets)} objeto(s) delimitado(s) pelo modelo.",
+                )
             else:
-                st.image(image_to_process, use_container_width=True, caption="Imagem original")
-
-        with col_info:
-            st.markdown("#### Resultado da Classificação")
-            if primary_det is not None:
-                render_advice_card(primary_det.advice, primary_det.confidence)
-                
-                # Se houver múltiplos objetos detectados
-                if len(all_dets) > 1:
-                    with st.expander(f"📦 Outros resíduos identificados ({len(all_dets) - 1})"):
-                        for idx, det in enumerate(all_dets[1:], start=2):
-                            st.write(
-                                f"**#{idx} - {det.advice.display_name}**: "
-                                f"Confiança: {det.confidence * 100:.1f}% | Destino: *{det.advice.destination}*"
-                            )
-            else:
-                st.warning(
-                    "⚠️ Nenhum resíduo foi identificado com confiança suficiente no limiar atual.\n\n"
-                    "**Orientações:**\n"
-                    "- Aproxime a câmera do objeto principal.\n"
-                    "- Garanta uma iluminação adequada e evite sombras fortes.\n"
-                    "- Você também pode diminuir ligeiramente o Limiar de Confiança na barra lateral."
+                st.image(
+                    image_to_process,
+                    use_container_width=True,
+                    caption="Imagem original submetida (sem delimitações acima do limiar).",
                 )
 
+    with col_output:
+        st.markdown('<div class="section-heading">2. Diagnóstico e Diretriz de Destinação</div>', unsafe_allow_html=True)
+
+        if image_to_process is None:
+            render_empty_state()
+        elif primary_det is not None:
+            render_advice_card(primary_det.advice, primary_det.confidence)
+
+            # Detecções adicionais na mesma imagem
+            if len(all_dets) > 1:
+                with st.expander(f"Detecções Secundárias na Mesma Imagem ({len(all_dets) - 1})", expanded=False):
+                    secondary_rows = []
+                    for idx, det in enumerate(all_dets[1:], start=2):
+                        secondary_rows.append({
+                            "Ordem": f"#{idx}",
+                            "Material": det.advice.display_name,
+                            "Grupo": det.advice.waste_type,
+                            "Confiança": f"{det.confidence * 100:.1f}%",
+                            "Destinação Recomendada": det.advice.destination,
+                        })
+                    st.dataframe(secondary_rows, use_container_width=True, hide_index=True)
+        else:
+            render_no_detection_state(conf_thresh)
+
+
 # ==============================================================================
-# ABA 2: TABELA DE REGRAS E DESTINAÇÃO
+# ABA 2: MATRIZ DE DIRETRIZES E DESTINAÇÃO
 # ==============================================================================
 with tab_rules:
-    st.markdown("### Diretrizes Oficiais de Destinação (BioCiclo Urbano & Coleta)")
+    st.markdown('<div class="section-heading">Matriz Oficial de Classificação e Destinação de Resíduos</div>', unsafe_allow_html=True)
     st.markdown(
-        "A tabela a seguir reflete a metodologia aprovada para o projeto, correlacionando "
-        "cada classe de material detectado ao seu grupo de resíduos e destinação prioritária:"
+        '<p class="subtitle" style="margin-bottom: 1.25rem;">'
+        'Correlação técnica entre as classes materiais identificadas pelo modelo de visão computacional, '
+        'seu enquadramento ambiental e a recomendação prioritária de manejo.'
+        '</p>',
+        unsafe_allow_html=True,
     )
 
     table_data = []
     for key, val in RULES_DATABASE.items():
-        if key == "ORGANIC":  # evitar duplicata visual de display
+        if key == "ORGANIC":
             continue
         table_data.append({
             "Categoria Reconhecida": val["display_name"],
-            "Classificação Geral": val["waste_type"],
-            "Sugestão de Destinação": val["destination"],
+            "Grupo de Resíduo": val["waste_type"],
+            "Destinação Prioritária": val["destination"],
+            "Diretriz Operacional": val["guidance"],
         })
 
-    st.table(table_data)
+    st.dataframe(table_data, use_container_width=True, hide_index=True)
 
     st.markdown(
         """
-        > 💡 **Nota sobre Resíduos Orgânicos:**  
-        > A categoria **Orgânico / Biodegradável** é destinada ao **BioCiclo Urbano**, permitindo que restos de alimentos, 
-        > cascas e hortifrutis de feiras e cozinhas se transformem em adubo orgânico de alta qualidade, 
-        > fortalecendo a agricultura urbana e aliviando a sobrecarga dos aterros sanitários.
-        """
+        <div class="info-card" style="border-left: 4px solid #2EA043; margin-top: 1.25rem;">
+            <div class="info-card-title">Integração com o Programa BioCiclo Urbano (Aracaju / EMSURB)</div>
+            <p class="info-card-body">
+                A categoria <strong>Orgânico / Biodegradável</strong> possui prioridade estratégica dentro do programa 
+                <strong>BioCiclo Urbano</strong>. A segregação correta na fonte evita a contaminação cruzada com recicláveis secos, 
+                viabilizando a conversão de resíduos de feiras livres, mercados e cozinhas em composto orgânico certificado 
+                para aplicação em áreas verdes públicas e agricultura familiar, além de reduzir o passivo ambiental em aterros sanitários.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
+
 # ==============================================================================
-# ABA 3: SOBRE O PROJETO & METODOLOGIA
+# ABA 3: ARQUITETURA E ESCOPO DO PROJETO
 # ==============================================================================
 with tab_about:
-    st.markdown(
-        """
-        ### 📖 Contextualização do Projeto
-        Este projeto surge a partir do **BioCiclo Urbano**, iniciativa de compostagem promovida pela 
-        **Prefeitura de Aracaju** e desenvolvida em articulação com a **Empresa Municipal de Serviços Urbanos (EMSURB)**. 
-        A iniciativa busca ampliar o aproveitamento de resíduos orgânicos provenientes de mercados, feiras e outros 
-        estabelecimentos, direcionando-os para processos de compostagem.
+    st.markdown('<div class="section-heading">Especificações Técnicas e Contextualização Institucional</div>', unsafe_allow_html=True)
 
-        Nesse contexto, este sistema atua como uma camada de apoio inteligente à identificação e à separação dos resíduos, 
-        contribuindo para as etapas iniciais de sua triagem.
+    col_a, col_b = st.columns(2, gap="medium")
 
-        ---
+    with col_a:
+        st.markdown(
+            """
+            <div class="info-card">
+                <div class="section-label">Contexto Operacional</div>
+                <div class="info-card-title">Programa BioCiclo Urbano e Gestão de Resíduos</div>
+                <p class="info-card-body">
+                    Desenvolvido em alinhamento com o programa <strong>BioCiclo Urbano</strong>, iniciativa promovida pela 
+                    Prefeitura Municipal de Aracaju em articulação com a <strong>Empresa Municipal de Serviços Urbanos (EMSURB)</strong>. 
+                    O projeto propõe uma ferramenta de triagem assistida por inteligência artificial capaz de apoiar operadores, 
+                    cidadãos e pontos de entrega na correta separação entre frações orgânicas compostáveis e materiais recicláveis secos.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-        ### 🧠 Abordagem Técnica e Inteligência Artificial
-        - **Modelo Previsto:** Rede neural convolucional **YOLO (You Only Look Once)** da Ultralytics (variante *nano* para inferência leve e eficiente).
-        - **Técnica:** Aprendizado Supervisionado por Transferência (*Transfer Learning / Fine-Tuning*).
-        - **Dataset Principal:** *Garbage Classification 3 (GC1)* do Roboflow Universe (10.464 imagens anotadas em formato YOLO) e *TrashNet*.
-        - **Métricas de Avaliação:** Precisão, Recall, mAP@50, mAP@50:95 e Matriz de Confusão.
+        st.markdown(
+            """
+            <div class="info-card">
+                <div class="section-label">Governança e Segurança de Decisão</div>
+                <div class="info-card-title">Controle de Incerteza e Limiar de Confiança</div>
+                <p class="info-card-body">
+                    Para mitigar falsos positivos decorrentes de oclusão, baixa luminosidade ou contaminação visual do resíduo, 
+                    o sistema incorpora uma camada de validação pós-inferência. Quando a probabilidade associada à predição 
+                    é inferior ao limiar de segurança configurado, a plataforma emite um alerta preventivo orientando a captura 
+                    de uma nova imagem sob condições controladas antes do descarte definitivo.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-        ---
+    with col_b:
+        st.markdown(
+            """
+            <div class="info-card">
+                <div class="section-label">Engenharia de Machine Learning</div>
+                <div class="info-card-title">Arquitetura Neural e Treinamento Supervisionado</div>
+                <p class="info-card-body">
+                    <strong>Arquitetura Base:</strong> Ultralytics YOLO11n (rede neural convolucional de estágio único otimizada para inferência em tempo real).<br><br>
+                    <strong>Método de Aprendizado:</strong> Transfer Learning e Fine-Tuning supervisionado em GPU (Google Colab T4) por 30 épocas.<br><br>
+                    <strong>Base de Dados:</strong> <em>Garbage Classification 3 (GC1)</em>, composta por 10.464 imagens anotadas com caixas delimitadoras distribuídas em 6 classes operacionais: Biodegradável, Papelão, Vidro, Metal, Papel e Plástico.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-        ### 👥 Equipe e Instituição
-        - **Instituição:** Universidade Federal de Sergipe (UFS)
-        - **Departamento:** Departamento de Computação (DComp) - São Cristóvão/SE
-        - **Disciplina:** Fundamentos da Inteligência Artificial
-        - **Ano de Execução:** 2026
-        """
-    )
+        st.markdown(
+            """
+            <div class="info-card">
+                <div class="section-label">Créditos Acadêmicos</div>
+                <div class="info-card-title">Universidade Federal de Sergipe (UFS)</div>
+                <p class="info-card-body">
+                    <strong>Unidade:</strong> Departamento de Computação (DComp)<br>
+                    <strong>Componente Curricular:</strong> Fundamentos da Inteligência Artificial<br>
+                    <strong>Localidade:</strong> Campus Prof. José Aloísio de Campos &mdash; São Cristóvão / Aracaju, SE<br>
+                    <strong>Período:</strong> 2026
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
