@@ -2,8 +2,8 @@
 # Compatível com Python 3.10+ / 3.11 / 3.12
 
 # Visão Computacional e Deep Learning
-ultralytics>=8.1.0
 opencv-python-headless>=4.9.0
+ultralytics>=8.1.0
 pillow>=10.2.0
 torchvision>=0.17.0
 
