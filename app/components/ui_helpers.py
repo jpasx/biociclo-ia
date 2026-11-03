@@ -9,7 +9,7 @@ from src.rules.destination import DestinationAdvice
 CUSTOM_CSS = """
 <style>
 .block-container {
-    padding-top: 1.75rem;
+    padding-top: 3.25rem;
     padding-bottom: 3rem;
     max-width: 1240px;
 }

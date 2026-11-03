@@ -110,7 +110,7 @@ RULES_DATABASE: Dict[str, Dict[str, Any]] = {
         ],
     },
     "PLASTIC": {
-        "display_name": "Plástico (PET / PP / Flexível)",
+        "display_name": "Plástico",
         "waste_type": "Reciclável",
         "destination": "Coleta Seletiva / Reciclagem",
         "action_color": "#EF4444",  # Vermelho

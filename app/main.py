@@ -46,13 +46,20 @@ st.set_page_config(
 inject_styles()
 
 
+MODEL_CACHE_VERSION = "v7_rgb_calibrated"
+
+if st.session_state.get("_active_model_ver") != MODEL_CACHE_VERSION:
+    st.cache_resource.clear()
+    st.session_state["_active_model_ver"] = MODEL_CACHE_VERSION
+
+
 @st.cache_resource(show_spinner="Inicializando motor de inferência...")
-def get_cached_detector(_version: str = "v6_rgb_fixed"):
+def get_cached_detector(cache_version: str = MODEL_CACHE_VERSION):
     """Carrega e mantém o detector YOLO em cache de recursos."""
     return WasteDetector()
 
 
-detector = get_cached_detector("v6_rgb_fixed")
+detector = get_cached_detector(MODEL_CACHE_VERSION)
 
 if not detector.is_custom_model:
     fresh_det = WasteDetector()

@@ -406,8 +406,8 @@ class WasteDetector:
             reverse=True,
         )
 
-        if len(detections) > 15:
-            detections = detections[:15]
+        if len(detections) > 6:
+            detections = detections[:6]
 
         primary_detection = detections[0] if detections else None
         return detections, primary_detection
