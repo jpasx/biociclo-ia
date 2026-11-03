@@ -97,7 +97,6 @@ def render_advice_card(advice: DestinationAdvice, confidence: float, total_objec
     """Renderiza o resultado da classificação usando st.container(border=True) e st.metric."""
     conf_pct = confidence * 100
     conama_label = getattr(advice, "conama_bin", "Coletor Padrão")
-    regional_note = getattr(advice, "regional_note", "")
 
     with st.container(border=True):
         m1, m2, m3 = st.columns(3)
@@ -123,9 +122,6 @@ def render_advice_card(advice: DestinationAdvice, confidence: float, total_objec
             st.warning(f"**Destinação Recomendada:** {advice.destination}  \n**Coletor CONAMA:** {conama_label}")
 
         st.markdown(f"**Diretriz Operacional:** {advice.guidance}")
-
-        if regional_note:
-            st.caption(f"📍 **Contexto Regional (Sergipe / Nordeste):** {regional_note}")
 
         st.markdown("**Boas práticas de descarte:**")
         for tip in advice.tips[:3]:
