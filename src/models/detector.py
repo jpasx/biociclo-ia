@@ -51,16 +51,15 @@ COCO_FALLBACK_MAPPING = {
     "tv": "METAL",
 }
 
-# Fatores de correção de prior para compensar o desbalanceamento severo de caixas
-# da classe BIODEGRADABLE no dataset Garbage Classification 3 (GC1)
+# Fatores de calibração suave para o modelo YOLO11s retreinado (45 épocas com dataset rebalanceado)
 GC1_PRIOR_CALIBRATION = {
-    "BIODEGRADABLE": 0.78,
-    "CARDBOARD": 1.28,
-    "GLASS": 1.25,
-    "METAL": 1.30,
-    "PAPER": 1.22,
-    "PLASTIC": 1.28,
-    "CLOTH": 1.15,
+    "BIODEGRADABLE": 1.12,
+    "CARDBOARD": 1.00,
+    "GLASS": 1.00,
+    "METAL": 1.00,
+    "PAPER": 1.12,
+    "PLASTIC": 1.05,
+    "CLOTH": 1.05,
     "TRASH": 1.00,
 }
 
@@ -388,21 +387,8 @@ class WasteDetector:
                 "calibrated": calibrated_flag,
             })
 
-        # Arbitragem espacial: se uma caixa de classe reciclável específica colide
-        # com uma caixa de BIODEGRADABLE no mesmo objeto, priorizar a classe específica
-        # caso seu score calibrado seja competitivo, ou usar pista visual na ROI
+        # NMS agnóstico espacial entre candidatos para evitar caixas duplicadas no mesmo objeto
         if calibrate_bias and self.is_custom_model and raw_candidates:
-            non_bio = [c for c in raw_candidates if c["class_name"] != "BIODEGRADABLE"]
-            if not non_bio and len(raw_candidates) <= 6:
-                # Verificar se a maior caixa de BIODEGRADABLE é na verdade um reciclável claro
-                top_cand = max(raw_candidates, key=lambda c: c["area_ratio"] * c["adj_conf"])
-                cue_cls = self._analyze_roi_material_cues(img_np, top_cand["box"])
-                if cue_cls and cue_cls != "BIODEGRADABLE":
-                    top_cand["class_name"] = cue_cls
-                    top_cand["adj_conf"] = min(0.95, max(top_cand["raw_conf"] * 1.15, threshold + 0.08))
-                    top_cand["calibrated"] = True
-
-            # NMS agnóstico com preferência por classes recalibradas
             raw_candidates.sort(key=lambda c: c["adj_conf"], reverse=True)
             filtered_candidates: List[Dict[str, Any]] = []
             for cand in raw_candidates:

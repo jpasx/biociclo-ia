@@ -47,12 +47,12 @@ inject_styles()
 
 
 @st.cache_resource(show_spinner="Inicializando motor de inferência...")
-def get_cached_detector(_version: str = "v4"):
+def get_cached_detector(_version: str = "v5_yolo11s_45ep"):
     """Carrega e mantém o detector YOLO em cache de recursos."""
     return WasteDetector()
 
 
-detector = get_cached_detector("v4")
+detector = get_cached_detector("v5_yolo11s_45ep")
 
 if not detector.is_custom_model:
     fresh_det = WasteDetector()
