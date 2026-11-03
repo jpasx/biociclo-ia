@@ -26,18 +26,15 @@ from app.components.ui_helpers import (
     render_advice_card,
 )
 
-MODEL_CACHE_VERSION = "v8_native_streamlit"
+MODEL_CACHE_VERSION = "v9_six_samples"
 
 SAMPLE_DESCRIPTIONS: Dict[str, str] = {
-    "exemplo_plastic.jpg": "Amostra 01 — Plástico (Embalagem Rígida HDPE)",
-    "exemplo_paper.jpg": "Amostra 02 — Papel (Descartáveis / Celulose)",
-    "exemplo_metal.jpg": "Amostra 03 — Metal (Recipiente de Alumínio)",
-    "exemplo_glass.jpg": "Amostra 04 — Vidro (Garrafa Escura)",
-    "exemplo_cardboard.jpg": "Amostra 05 — Papelão (Caixa Ondulada)",
-    "exemplo_biodegradable.jpg": "Amostra 06 — Orgânico / Biodegradável (Hortifruti)",
-    "amostra_organico_maca.bmp": "Amostra 07 — Orgânico (Resíduo de Fruta)",
-    "amostra_plastico_garrafa.bmp": "Amostra 08 — Plástico (Garrafa PET)",
-    "amostra_papelao_caixa.bmp": "Amostra 09 — Papelão (Estrutura Secundária)",
+    "exemplo_plastic.jpg": "Amostra 01 — Plástico (Embalagem Termoformada PET)",
+    "exemplo_paper.jpg": "Amostra 02 — Papel (Impresso / Folheto Celulósico)",
+    "exemplo_metal.jpg": "Amostra 03 — Metal (Lata de Aço / Folha de Flandres)",
+    "exemplo_glass.jpg": "Amostra 04 — Vidro (Garrafa de Vidro Âmbar)",
+    "exemplo_cardboard.jpg": "Amostra 05 — Papelão (Caixa de Papelão Ondulado)",
+    "exemplo_biodegradable.jpg": "Amostra 06 — Orgânico / Biodegradável (Resíduo de Frutas)",
 }
 
 
@@ -51,22 +48,15 @@ def get_cached_detector(cache_version: str = MODEL_CACHE_VERSION) -> WasteDetect
 
 
 @st.cache_data
-def get_sample_catalog() -> Dict[str, str]:
-    """Retorna o mapeamento de amostras disponíveis no diretório data/samples."""
+def get_sample_catalog(cache_version: str = MODEL_CACHE_VERSION) -> Dict[str, str]:
+    """Retorna o mapeamento ordenado das 6 amostras (1 de cada classe) em data/samples."""
     samples_dir = ROOT_DIR / "data" / "samples"
-    raw_files = (
-        list(samples_dir.glob("*.jpg"))
-        + list(samples_dir.glob("*.png"))
-        + list(samples_dir.glob("*.bmp"))
-    )
-    sorted_files = sorted(
-        raw_files,
-        key=lambda f: (0 if f.name.startswith("exemplo_") else 1, f.name),
-    )
-    return {
-        SAMPLE_DESCRIPTIONS.get(f.name, f.name): str(f)
-        for f in sorted_files
-    }
+    catalog: Dict[str, str] = {}
+    for fname, label in SAMPLE_DESCRIPTIONS.items():
+        fpath = samples_dir / fname
+        if fpath.exists():
+            catalog[label] = str(fpath)
+    return catalog
 
 
 @st.cache_data
