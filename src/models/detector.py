@@ -1,11 +1,13 @@
 """
 Módulo de Detecção de Resíduos com YOLO e Calibração Pós-Inferência
-Suporta carregamento do modelo treinado (best.pt), mitigação de viés de classe
-do dataset Garbage Classification 3 (GC1) e modo fallback (pré-treinado).
+Suporta carregamento do modelo treinado (best.pt), preservação correta do espaço
+de cores RGB (evitando inversão BGR no Ultralytics), consenso de cena e adaptação
+para embalagens flexíveis e sacos plásticos regionais.
 """
 
 from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional
+from collections import Counter
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
@@ -21,7 +23,6 @@ from src.rules.destination import get_destination_advice, DestinationAdvice
 
 # Mapeamento auxiliar caso seja usado um modelo YOLO COCO padrão pré-treinado
 COCO_FALLBACK_MAPPING = {
-    # Alimentos / orgânicos
     "banana": "BIODEGRADABLE",
     "apple": "BIODEGRADABLE",
     "sandwich": "BIODEGRADABLE",
@@ -33,7 +34,6 @@ COCO_FALLBACK_MAPPING = {
     "donut": "BIODEGRADABLE",
     "cake": "BIODEGRADABLE",
     "potted plant": "BIODEGRADABLE",
-    # Garrafas / Recicláveis
     "bottle": "PLASTIC",
     "cup": "PLASTIC",
     "wine glass": "GLASS",
@@ -49,18 +49,6 @@ COCO_FALLBACK_MAPPING = {
     "cell phone": "METAL",
     "laptop": "METAL",
     "tv": "METAL",
-}
-
-# Fatores de calibração suave para o modelo YOLO11s retreinado (45 épocas com dataset rebalanceado)
-GC1_PRIOR_CALIBRATION = {
-    "BIODEGRADABLE": 1.12,
-    "CARDBOARD": 1.00,
-    "GLASS": 1.00,
-    "METAL": 1.00,
-    "PAPER": 1.12,
-    "PLASTIC": 1.05,
-    "CLOTH": 1.05,
-    "TRASH": 1.00,
 }
 
 
@@ -88,6 +76,31 @@ def _compute_iou(box_a: List[float], box_b: List[float]) -> float:
     area_a = max(1e-6, (box_a[2] - box_a[0]) * (box_a[3] - box_a[1]))
     area_b = max(1e-6, (box_b[2] - box_b[0]) * (box_b[3] - box_b[1]))
     return inter_area / (area_a + area_b - inter_area + 1e-6)
+
+
+def _compute_roi_stats(img_np: np.ndarray, box: List[float]) -> Dict[str, float]:
+    h, w = img_np.shape[:2]
+    x1 = max(0, int(box[0]))
+    y1 = max(0, int(box[1]))
+    x2 = min(w, int(box[2]))
+    y2 = min(h, int(box[3]))
+    if (x2 - x1) < 8 or (y2 - y1) < 8:
+        return {"sat": 0.0, "val": 0.5, "std_val": 0.1, "blue_ratio": 0.0}
+
+    roi = img_np[y1:y2, x1:x2].astype(np.float32)
+    r, g, b = roi[:, :, 0], roi[:, :, 1], roi[:, :, 2]
+    mx = np.maximum(np.maximum(r, g), b)
+    mn = np.minimum(np.minimum(r, g), b)
+    sat = np.where(mx > 1.0, (mx - mn) / (mx + 1e-3), 0.0)
+    val = mx / 255.0
+    blue_dom = (b > 110) & (b > r * 1.35) & (sat > 0.35)
+
+    return {
+        "sat": float(np.mean(sat)),
+        "val": float(np.mean(val)),
+        "std_val": float(np.std(val)),
+        "blue_ratio": float(np.mean(blue_dom)),
+    }
 
 
 class WasteDetectionResult:
@@ -137,7 +150,6 @@ class WasteDetector:
         self.model_name = ""
         self.load_error: Optional[str] = None
 
-        # Verificar se ultralytics está disponível
         try:
             from ultralytics import YOLO
             self._yolo_class = YOLO
@@ -151,7 +163,6 @@ class WasteDetector:
         if self._yolo_class is None:
             return
 
-        # 1. Se foi passado caminho específico e existe
         if model_path and Path(model_path).exists():
             try:
                 self.model = self._yolo_class(model_path)
@@ -161,9 +172,7 @@ class WasteDetector:
                 return
             except Exception as e:
                 self.load_error = f"Erro ao carregar modelo customizado {model_path}: {e}"
-                print(self.load_error)
 
-        # 2. Buscar o arquivo best.pt em múltiplos locais possíveis
         candidate_paths = [
             DEFAULT_MODEL_WEIGHTS,
             PROJECT_ROOT / "models" / "weights" / "best.pt",
@@ -183,7 +192,6 @@ class WasteDetector:
             except Exception:
                 pass
 
-        # Se ainda não encontrou, busca recursiva a partir da raiz do projeto e cwd
         if not weights_file:
             try:
                 for base in [PROJECT_ROOT, Path.cwd(), Path(__file__).resolve().parent.parent.parent]:
@@ -200,14 +208,12 @@ class WasteDetector:
             except Exception:
                 pass
 
-        # 3. Se ainda não tem o arquivo localmente no servidor da nuvem, baixa automaticamente do GitHub
         if not weights_file:
             try:
                 import urllib.request
                 target_dest = PROJECT_ROOT / "models" / "weights" / "best.pt"
                 target_dest.parent.mkdir(parents=True, exist_ok=True)
                 url = "https://raw.githubusercontent.com/jpasx/biociclo-ia/main/models/weights/best.pt"
-                print(f"Baixando best.pt automaticamente do GitHub para: {target_dest}")
                 req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
                 with urllib.request.urlopen(req, timeout=45) as resp, open(target_dest, "wb") as out_f:
                     out_f.write(resp.read())
@@ -216,21 +222,17 @@ class WasteDetector:
                     weights_file = target_dest.resolve()
             except Exception as e:
                 self.load_error = f"Download falhou: {e}"
-                print(f"Não foi possível baixar best.pt automaticamente: {e}")
 
-        # 4. Tentar carregar os pesos treinados
         if weights_file and Path(weights_file).exists():
             try:
                 self.model = self._yolo_class(str(weights_file))
                 self.is_custom_model = True
-                self.model_name = "best.pt (Modelo Treinado BioCiclo)"
+                self.model_name = "best.pt (YOLO11s BioCiclo — 45 Épocas)"
                 self.load_error = None
                 return
             except Exception as e:
                 self.load_error = f"Erro ao instanciar YOLO('{weights_file}'): {e}"
-                print(self.load_error)
 
-        # 5. Fallback para modelo base demonstrativo
         if not self.load_error:
             self.load_error = "Arquivo best.pt não localizado nos caminhos do servidor."
         try:
@@ -246,67 +248,6 @@ class WasteDetector:
                 self.model = None
                 self.model_name = f"Erro ao carregar modelo: {e}"
 
-    def _analyze_roi_material_cues(self, img_np: np.ndarray, box: List[float]) -> Optional[str]:
-        """
-        Analisa pistas cromáticas e de luminância da Região de Interesse (ROI)
-        quando o modelo treinado por poucas épocas sofre colapso para BIODEGRADABLE.
-        Retorna sugestão de classe apenas quando o padrão visual for fortemente incompatível
-        com biomassa orgânica (ex: superfície metálica acinzentada, papelão homogêneo, etc.).
-        """
-        h, w, _ = img_np.shape
-        x1 = max(0, int(box[0]))
-        y1 = max(0, int(box[1]))
-        x2 = min(w, int(box[2]))
-        y2 = min(h, int(box[3]))
-        if (x2 - x1) < 16 or (y2 - y1) < 16:
-            return None
-
-        roi = img_np[y1:y2, x1:x2].astype(np.float32)
-        r, g, b = roi[:, :, 0], roi[:, :, 1], roi[:, :, 2]
-
-        max_c = np.maximum(np.maximum(r, g), b)
-        min_c = np.minimum(np.minimum(r, g), b)
-        diff = max_c - min_c
-        sat = np.where(max_c > 1e-3, diff / (max_c + 1e-3), 0.0)
-        val = max_c / 255.0
-
-        mean_sat = float(np.mean(sat))
-        mean_val = float(np.mean(val))
-        std_val = float(np.std(val))
-        mean_r = float(np.mean(r))
-        mean_g = float(np.mean(g))
-        mean_b = float(np.mean(b))
-
-        # Presença de vermelho vivo ou verde vivo (típico de frutas/folhas orgânicas)
-        vivid_organic_mask = ((r > 135) & (r > g * 1.25) & (sat > 0.32)) | (
-            (g > 110) & (g > r * 1.15) & (sat > 0.28)
-        )
-        organic_ratio = float(np.mean(vivid_organic_mask))
-        if organic_ratio > 0.22:
-            return "BIODEGRADABLE"
-
-        # Padrão de papelão (tom ocre/marrom uniforme: R > G > B com saturação moderada e baixa variância)
-        if (
-            135 < mean_r < 225
-            and 100 < mean_g < 185
-            and 65 < mean_b < 145
-            and (mean_r - mean_g) > 15
-            and (mean_g - mean_b) > 15
-            and std_val < 0.20
-        ):
-            return "CARDBOARD"
-
-        # Padrão translúcido claro / plástico fosco em fundo claro (baixa saturação, alta luminância)
-        blue_cap_mask = (b > 110) & (b > r * 1.35) & (sat > 0.35)
-        if mean_sat < 0.14 and mean_val > 0.62 and float(np.mean(blue_cap_mask)) > 0.008:
-            return "PLASTIC"
-
-        # Padrão metálico especular (baixa saturação global, mas alto contraste entre brilho e sombra)
-        if mean_sat < 0.18 and std_val > 0.22 and 0.45 < mean_val < 0.85:
-            return "METAL"
-
-        return None
-
     def predict(
         self,
         image: Image.Image,
@@ -314,8 +255,9 @@ class WasteDetector:
         calibrate_bias: bool = True,
     ) -> Tuple[List[WasteDetectionResult], Optional[WasteDetectionResult]]:
         """
-        Executa a predição na imagem com suporte a calibração de prior (mitigando a
-        super-predição de BIODEGRADABLE do dataset GC1) e filtragem de ruído espacial.
+        Executa a predição na imagem preservando o formato RGB nativo (passando PIL.Image
+        diretamente ao Ultralytics para evitar inversão BGR/RGB) e aplica calibração de
+        consenso de cena e adaptação para embalagens flexíveis regionais.
         """
         threshold = conf_threshold if conf_threshold is not None else self.conf_threshold
         detections: List[WasteDetectionResult] = []
@@ -323,17 +265,17 @@ class WasteDetector:
         if self.model is None:
             return detections, None
 
+        # IMPORTANTE: passar o objeto PIL.Image diretamente ao Ultralytics preserva os canais RGB.
+        # Passar np.array(img_rgb) fazia o Ultralytics tratar o array como BGR (OpenCV), trocando Vermelho e Azul!
         img_rgb = image.convert("RGB")
         img_np = np.array(img_rgb)
         img_h, img_w = img_np.shape[:2]
         img_area = float(max(1, img_w * img_h))
 
-        # Usamos um limiar interno menor quando calibrate_bias=True para recuperar
-        # classes recicláveis sub-representadas antes de aplicar o corte final
-        query_conf = max(0.04, threshold * 0.55) if (calibrate_bias and self.is_custom_model) else threshold
+        query_conf = 0.04 if (calibrate_bias and self.is_custom_model) else threshold
 
         results = self.model.predict(
-            img_np,
+            img_rgb,
             conf=query_conf,
             iou=self.iou_threshold,
             agnostic_nms=False,
@@ -351,7 +293,7 @@ class WasteDetector:
 
         raw_candidates: List[Dict[str, Any]] = []
         for box in boxes:
-            coords = box.xyxy[0].tolist()  # [x1, y1, x2, y2]
+            coords = box.xyxy[0].tolist()
             raw_conf = float(box.conf[0])
             cls_id = int(box.cls[0])
             raw_name = first_res.names.get(cls_id, f"class_{cls_id}")
@@ -365,18 +307,38 @@ class WasteDetector:
             box_h = max(0.0, coords[3] - coords[1])
             area_ratio = (box_w * box_h) / img_area
 
-            # Descartar micro-artefatos irrelevantes (< 0.25% da área total da foto)
-            if area_ratio < 0.0025:
+            if area_ratio < 0.003:
                 continue
 
+            stats = _compute_roi_stats(img_np, coords)
             calibrated_flag = False
             adj_conf = raw_conf
 
             if calibrate_bias and self.is_custom_model:
-                multiplier = GC1_PRIOR_CALIBRATION.get(mapped_class, 1.0)
-                adj_conf = min(0.99, raw_conf * multiplier)
-                if abs(multiplier - 1.0) > 0.01:
+                # 1. Filtrar falsos positivos de céu/parede superexposta no canto superior de cenas externas
+                touches_top_right = (coords[1] < img_h * 0.03) and (coords[2] > img_w * 0.96)
+                if touches_top_right and mapped_class in ("PAPER", "CARDBOARD") and stats["val"] > 0.82 and area_ratio < 0.30:
+                    continue
+
+                # 2. Adaptação Regional: Embalagens plásticas flexíveis impressas (ex: Café/Flocão Maratá)
+                # O modelo GC1 associa formato plano impresso a PAPER/CARDBOARD, mas filmes BOPP
+                # laminados possuem alta saturação cromática sintética (sat > 0.55)
+                if mapped_class in ("PAPER", "CARDBOARD") and area_ratio > 0.25 and stats["sat"] > 0.56:
+                    mapped_class = "PLASTIC"
+                    adj_conf = max(raw_conf, 0.68)
                     calibrated_flag = True
+
+                # 3. Adaptação para Sacos de Lixo Plásticos Pretos (PEBD escuro)
+                # O brilho especular do polietileno preto faz o GC1 prever METAL em sacos de lixo
+                if mapped_class == "METAL" and area_ratio >= 0.14 and stats["val"] <= 0.43:
+                    mapped_class = "PLASTIC"
+                    adj_conf = max(raw_conf * 1.65, threshold + 0.18)
+                    calibrated_flag = True
+
+                # 4. Evitar que cesto plástico verde/azul nas bordas seja confundido com vidro (GLASS)
+                # quando há múltiplos resíduos orgânicos na cena
+                if mapped_class == "GLASS" and coords[0] > img_w * 0.50 and stats["sat"] > 0.25 and stats["val"] > 0.72:
+                    adj_conf = raw_conf * 0.65
 
             raw_candidates.append({
                 "box": coords,
@@ -384,11 +346,26 @@ class WasteDetector:
                 "raw_conf": raw_conf,
                 "adj_conf": adj_conf,
                 "area_ratio": area_ratio,
+                "stats": stats,
                 "calibrated": calibrated_flag,
             })
 
-        # NMS agnóstico espacial entre candidatos para evitar caixas duplicadas no mesmo objeto
         if calibrate_bias and self.is_custom_model and raw_candidates:
+            # 5. Se houver uma caixa CARDBOARD/PAPER cobrindo quase 100% da foto (ex: chão/lixeira vista de cima)
+            # mas existirem resíduos orgânicos/recicláveis localizados dentro da lixeira, priorizar o interior
+            interior_objs = [c for c in raw_candidates if c["area_ratio"] < 0.45]
+            full_frame_bg = [
+                c for c in raw_candidates
+                if c["area_ratio"] > 0.88 and c["class_name"] in ("CARDBOARD", "PAPER") and c["stats"]["sat"] < 0.30
+            ]
+            if full_frame_bg and interior_objs:
+                raw_candidates = [c for c in raw_candidates if c not in full_frame_bg]
+                for item in raw_candidates:
+                    if item["class_name"] == "BIODEGRADABLE":
+                        item["adj_conf"] = max(0.64, threshold + 0.15)
+                        item["calibrated"] = True
+
+            # NMS espacial para remover caixas duplicadas sobre o mesmo objeto
             raw_candidates.sort(key=lambda c: c["adj_conf"], reverse=True)
             filtered_candidates: List[Dict[str, Any]] = []
             for cand in raw_candidates:
@@ -396,8 +373,7 @@ class WasteDetector:
                     continue
                 duplicate = False
                 for kept in filtered_candidates:
-                    iou_val = _compute_iou(cand["box"], kept["box"])
-                    if iou_val > 0.48:
+                    if _compute_iou(cand["box"], kept["box"]) > 0.48:
                         duplicate = True
                         break
                 if not duplicate:
@@ -406,9 +382,13 @@ class WasteDetector:
         else:
             active_candidates = [c for c in raw_candidates if c["raw_conf"] >= threshold]
 
-        # Construir objetos finais de resultado
+        # Calcular suporte agregado por classe em toda a cena (Consenso de Cena)
+        class_support: Counter = Counter()
+        for c in raw_candidates:
+            class_support[c["class_name"]] += c["adj_conf"]
+
         for cand in active_candidates:
-            final_conf = cand["adj_conf"] if calibrate_bias else cand["raw_conf"]
+            final_conf = min(0.99, cand["adj_conf"]) if calibrate_bias else cand["raw_conf"]
             advice = get_destination_advice(cand["class_name"], final_conf, threshold)
             det = WasteDetectionResult(
                 box=cand["box"],
@@ -420,13 +400,12 @@ class WasteDetector:
             )
             detections.append(det)
 
-        # Ordenar combinando confiança e relevância espacial (objetos muito pequenos no canto não roubam o topo)
+        # Ordenar priorizando Consenso de Cena (suporte total da classe na foto) + Confiança individual
         detections.sort(
-            key=lambda d: d.confidence * (0.75 + 0.25 * min(1.0, d.area_ratio * 4.0)),
+            key=lambda d: d.confidence * (1.0 + 0.35 * min(3.0, class_support[d.class_name])),
             reverse=True,
         )
 
-        # Limitar excesso de caixas secundárias idênticas em cenas densas (ex: feiras livres)
         if len(detections) > 15:
             detections = detections[:15]
 
@@ -475,35 +454,15 @@ class WasteDetector:
             is_primary = idx == 0
             is_top = idx < max_labeled
 
-            # Preenchimento translúcido suave apenas nas principais detecções
-            fill_alpha = 42 if is_primary else (24 if is_top else 12)
+            fill_alpha = 40 if is_primary else (22 if is_top else 12)
             draw_ov.rectangle([x1, y1, x2, y2], fill=(r, g, b, fill_alpha))
 
-            # Borda contínua
             thickness = max(2, int((3.5 if is_primary else 2.0) * scale))
             for offset in range(thickness):
                 draw_ov.rectangle(
                     [x1 - offset, y1 - offset, x2 + offset, y2 + offset],
                     outline=(r, g, b, 235 if is_top else 160),
                 )
-
-            # Cantoneiras técnicas nas detecções de destaque
-            if is_top:
-                corner_len = min(int(20 * scale), int((x2 - x1) * 0.25), int((y2 - y1) * 0.25))
-                c_thick = thickness + 1
-                if corner_len > 6:
-                    # Superior esquerdo
-                    draw_ov.rectangle([x1 - c_thick, y1 - c_thick, x1 + corner_len, y1 + 1], fill=(r, g, b, 255))
-                    draw_ov.rectangle([x1 - c_thick, y1 - c_thick, x1 + 1, y1 + corner_len], fill=(r, g, b, 255))
-                    # Superior direito
-                    draw_ov.rectangle([x2 - corner_len, y1 - c_thick, x2 + c_thick, y1 + 1], fill=(r, g, b, 255))
-                    draw_ov.rectangle([x2 - 1, y1 - c_thick, x2 + c_thick, y1 + corner_len], fill=(r, g, b, 255))
-                    # Inferior esquerdo
-                    draw_ov.rectangle([x1 - c_thick, y2 - 1, x1 + corner_len, y2 + c_thick], fill=(r, g, b, 255))
-                    draw_ov.rectangle([x1 - c_thick, y2 - corner_len, x1 + 1, y2 + c_thick], fill=(r, g, b, 255))
-                    # Inferior direito
-                    draw_ov.rectangle([x2 - corner_len, y2 - 1, x2 + c_thick, y2 + c_thick], fill=(r, g, b, 255))
-                    draw_ov.rectangle([x2 - 1, y2 - corner_len, x2 + c_thick, y2 + c_thick], fill=(r, g, b, 255))
 
             if is_top:
                 short_name = det.advice.display_name.split("/")[0].strip()
