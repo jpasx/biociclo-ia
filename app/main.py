@@ -374,8 +374,20 @@ def render_tab_como_funciona() -> None:
 # ==============================================================================
 def render_tab_contato() -> None:
     """Renderiza as informações institucionais, equipe e links do projeto."""
-    st.subheader("Ficha Institucional e Contato")
-    col_inst, col_links = st.columns(2, gap="medium")
+    st.subheader("Ficha Institucional e Equipe Desenvolvedora")
+    col_team, col_inst, col_links = st.columns(3, gap="medium")
+
+    with col_team:
+        with st.container(border=True):
+            st.markdown("#### 👥 Equipe Desenvolvedora")
+            st.markdown(
+                "- **Anderson Oliveira Rocha**\n"
+                "- **Esther Kelre Nogueira Protázio**\n"
+                "- **Igor Kawã Ribeiro de Jesus**\n"
+                "- **João Paulo Andrade Santos**\n"
+                "- **Raíssa Tanazio Santos**\n"
+                "- **Ricardo Gomes Miranda**"
+            )
 
     with col_inst:
         with st.container(border=True):
