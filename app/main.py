@@ -416,8 +416,14 @@ def render_tab_como_funciona() -> None:
 
     assets_dir = ROOT_DIR / "docs" / "assets"
     comp_chart = assets_dir / "comparativo_epocas_erro.png"
+    err_class_chart = assets_dir / "erro_por_classe.png"
     loss_chart = assets_dir / "training_results.png"
     cm_chart = assets_dir / "confusion_matrix.png"
+
+    if err_class_chart.exists():
+        with st.container(border=True):
+            st.markdown("**Gráfico de Erro por Classe (Extraído da Matriz de Confusão Normalizada)**")
+            st.image(str(err_class_chart), use_container_width=True)
 
     if comp_chart.exists():
         with st.container(border=True):
