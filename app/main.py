@@ -365,6 +365,77 @@ def render_tab_como_funciona() -> None:
                 "Consulta a matriz de destinação CONAMA/BioCiclo e aciona alerta preventivo caso a confiança fique abaixo de 45%."
             )
 
+    st.subheader("Estudo Experimental: Variação de Épocas, Erro (Loss) e Taxa de Aprendizado")
+    exp_rows = [
+        {
+            "Experimento / Épocas": "Exp 01 — 3 Épocas (Baseline Inicial)",
+            "Dataset (Balanceamento)": "Desbalanceado (10.464 imgs / ~13k orgânicos)",
+            "Learning Rate (lr0 → atual)": "0.00100 (Warmup inicial)",
+            "box_loss (Treino)": "1.2908",
+            "cls_loss (Treino)": "5.8594",
+            "dfl_loss (Treino)": "1.5606",
+            "Erro Total (Loss ↓)": "8.7108",
+            "Precisão (%)": "38.0%",
+            "mAP@50 (%)": "24.5%",
+        },
+        {
+            "Experimento / Épocas": "Exp 02 — 15 Épocas (Intermediário I)",
+            "Dataset (Balanceamento)": "Rebalanceado (Subamostragem máx. 2.200/classe)",
+            "Learning Rate (lr0 → atual)": "0.00078 (Cosine Decay)",
+            "box_loss (Treino)": "1.0558",
+            "cls_loss (Treino)": "4.1112",
+            "dfl_loss (Treino)": "1.3895",
+            "Erro Total (Loss ↓)": "6.5565",
+            "Precisão (%)": "53.7%",
+            "mAP@50 (%)": "39.1%",
+        },
+        {
+            "Experimento / Épocas": "Exp 03 — 30 Épocas (Intermediário II)",
+            "Dataset (Balanceamento)": "Rebalanceado (Subamostragem máx. 2.200/classe)",
+            "Learning Rate (lr0 → atual)": "0.00029 (Cosine Decay)",
+            "box_loss (Treino)": "0.9317",
+            "cls_loss (Treino)": "3.0734",
+            "dfl_loss (Treino)": "1.2877",
+            "Erro Total (Loss ↓)": "5.2928",
+            "Precisão (%)": "57.6%",
+            "mAP@50 (%)": "46.0%",
+        },
+        {
+            "Experimento / Épocas": "Exp 04 — 45 Épocas (Modelo Final YOLO11s)",
+            "Dataset (Balanceamento)": "Rebalanceado + Filtro de Ruído Espacial",
+            "Learning Rate (lr0 → atual)": "0.00001 (Convergência fina)",
+            "box_loss (Treino)": "0.8584",
+            "cls_loss (Treino)": "2.3060",
+            "dfl_loss (Treino)": "1.2411",
+            "Erro Total (Loss ↓)": "4.4055",
+            "Precisão (%)": "61.5%",
+            "mAP@50 (%)": "79.1% (Val. Limpa)",
+        },
+    ]
+    st.dataframe(exp_rows, use_container_width=True, hide_index=True)
+
+    assets_dir = ROOT_DIR / "docs" / "assets"
+    comp_chart = assets_dir / "comparativo_epocas_erro.png"
+    loss_chart = assets_dir / "training_results.png"
+    cm_chart = assets_dir / "confusion_matrix.png"
+
+    if comp_chart.exists():
+        with st.container(border=True):
+            st.markdown("**Gráfico Comparativo: Queda do Erro Total, Evolução por Épocas e Taxa de Aprendizado**")
+            st.image(str(comp_chart), use_container_width=True)
+
+    c_left, c_right = st.columns([1.35, 1], gap="medium")
+    with c_left:
+        if loss_chart.exists():
+            with st.container(border=True):
+                st.markdown("**Curvas Completas de Erro (Box, Cls, DFL Loss) e Métricas — 45 Épocas**")
+                st.image(str(loss_chart), use_container_width=True)
+    with c_right:
+        if cm_chart.exists():
+            with st.container(border=True):
+                st.markdown("**Matriz de Confusão Normalizada (45 Épocas)**")
+                st.image(str(cm_chart), use_container_width=True)
+
     st.subheader("Matriz Oficial de Classificação e Destinação")
     st.dataframe(get_rules_table_data(), use_container_width=True, hide_index=True)
 
